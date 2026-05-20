@@ -1,73 +1,36 @@
-# React + TypeScript + Vite
+# uilab-3-text
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Wavy text field experiment — a single-line input rendered along a rope that
+sags under the weight of its own text.
 
-Currently, two official plugins are available:
+Live demo: https://hashrock.github.io/uilab-3-text/
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## What it does
 
-## React Compiler
+The text field's curve is not a fixed parabola: it's a 50-segment polyline
+driven by a Verlet rope simulation. Each frame:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. Text width along the path is mapped onto the segments to compute a
+   per-segment "load" (skipping leading whitespace).
+2. The load adds extra gravity to the adjacent rope nodes — heavier
+   sections of text sag more.
+3. Distance constraints are relaxed for 30 iterations so the chain stays
+   inextensible across all 51 nodes.
+4. The polyline becomes the `textPath` and drives the ribbon's outline.
 
-## Expanding the ESLint configuration
+The endpoints are pinned, so the field has fixed left/right anchors and
+the middle behaves like a hanging chain.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Debug overlay
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Press `.` (with the field unfocused) to toggle 50 segment markers that
+visualise where the load is concentrated.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Develop
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm install
+pnpm dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Pushing to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`.
