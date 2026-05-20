@@ -17,12 +17,15 @@ export function WavyTextField({
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const pathRef = useRef<SVGPathElement>(null)
+  const textRef = useRef<SVGTextElement>(null)
   const measureCanvas = useRef<HTMLCanvasElement | null>(null)
   const [focused, setFocused] = useState(false)
   const [cursorIndex, setCursorIndex] = useState(0)
   const [caret, setCaret] = useState<{ x: number; y: number; angle: number } | null>(
     null,
   )
+  type Segment = { x: number; y: number; angle: number; load: number }
+  const [segments, setSegments] = useState<Segment[]>([])
   const reactId = useId()
   const pathId = `curve-center-${reactId.replace(/:/g, '')}`
 
@@ -35,6 +38,7 @@ export function WavyTextField({
   const fontSize = 18
   const fontFamily = 'system-ui, sans-serif'
   const startOffset = 16
+  const segmentCount = 50
 
   const center = (t: number) => {
     const x = padX + (width - padX * 2) * t
@@ -89,6 +93,36 @@ export function WavyTextField({
     ctx.font = `${fontSize}px ${fontFamily}`
     return ctx.measureText(text).width
   }
+
+  useLayoutEffect(() => {
+    if (!pathRef.current) {
+      setSegments([])
+      return
+    }
+    const path = pathRef.current
+    const total = path.getTotalLength()
+    const textLen = value && textRef.current ? textRef.current.getComputedTextLength() : 0
+    const leading = value.match(/^\s+/)?.[0] ?? ''
+    const leadingLen = leading ? measureText(leading) : 0
+    const textStart = startOffset + leadingLen
+    const textEnd = startOffset + textLen
+    const segLen = total / segmentCount
+    const eps = 0.5
+    const next: Segment[] = []
+    for (let i = 0; i < segmentCount; i++) {
+      const a = i * segLen
+      const b = (i + 1) * segLen
+      const overlap = Math.max(0, Math.min(b, textEnd) - Math.max(a, textStart))
+      const load = overlap / segLen
+      const mid = (a + b) / 2
+      const p = path.getPointAtLength(mid)
+      const pa = path.getPointAtLength(Math.max(0, mid - eps))
+      const pb = path.getPointAtLength(Math.min(total, mid + eps))
+      const angle = (Math.atan2(pb.y - pa.y, pb.x - pa.x) * 180) / Math.PI
+      next.push({ x: p.x, y: p.y, angle, load })
+    }
+    setSegments(next)
+  }, [value, width, height])
 
   useLayoutEffect(() => {
     if (!focused || !pathRef.current) {
@@ -155,15 +189,35 @@ export function WavyTextField({
           strokeLinejoin="round"
         />
         <text
+          ref={textRef}
           fontSize={fontSize}
           fontFamily={fontFamily}
           fill={isPlaceholder ? '#aaa' : '#08060d'}
           dominantBaseline="middle"
+          xmlSpace="preserve"
         >
           <textPath href={`#${pathId}`} startOffset={startOffset}>
             {displayText}
           </textPath>
         </text>
+        {segments.map((s, i) => {
+          const rad = (s.angle * Math.PI) / 180
+          const nx = -Math.sin(rad)
+          const ny = Math.cos(rad)
+          const offset = halfH + ringGap + 10
+          const cx = s.x + nx * offset
+          const cy = s.y + ny * offset
+          return (
+            <circle
+              key={i}
+              cx={cx}
+              cy={cy}
+              r={1.2 + s.load * 3.2}
+              fill={s.load > 0 ? '#ff4d6d' : '#d8d8d8'}
+              opacity={0.85}
+            />
+          )
+        })}
         {focused && caret && (
           <line
             x1={caret.x}
