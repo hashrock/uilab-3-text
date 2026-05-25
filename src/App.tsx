@@ -1,27 +1,37 @@
-import { useState } from 'react'
-import { WavyTextField } from './WavyTextField'
-import './App.css'
+import { HashRouter, Routes, Route, Link } from 'react-router-dom'
+import { Home } from './Home'
+import { LffDemo } from './LffDemo'
+
+function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <div>
+      <nav
+        style={{
+          display: 'flex',
+          gap: 16,
+          padding: '12px 24px',
+          borderBottom: '1px solid #eee',
+          fontFamily: 'sans-serif',
+        }}
+      >
+        <Link to="/">LFF</Link>
+        <Link to="/wavy">Wavy</Link>
+      </nav>
+      {children}
+    </div>
+  )
+}
 
 function App() {
-  const [text, setText] = useState('')
-
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 40,
-        boxSizing: 'border-box',
-      }}
-    >
-      <WavyTextField
-        value={text}
-        onChange={setText}
-        placeholder="ここに入力…"
-      />
-    </div>
+    <HashRouter>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<LffDemo />} />
+          <Route path="/wavy" element={<Home />} />
+        </Routes>
+      </Layout>
+    </HashRouter>
   )
 }
 
