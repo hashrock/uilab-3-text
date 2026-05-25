@@ -412,8 +412,34 @@ export function LffDemo() {
 
   return (
     <div style={{ padding: 24, fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <details style={{ alignSelf: 'center', width: '100%', maxWidth: 480, marginTop: 24, order: 3 }}>
-        <summary style={{ cursor: 'pointer', padding: '8px 0', userSelect: 'none' }}>Settings</summary>
+      <details className="lff-settings" style={{ alignSelf: 'center', width: '100%', maxWidth: 480, marginTop: 24, order: 3 }}>
+        <style>{`
+          .lff-settings label { font-size: 11px; color: #666; display: block; }
+          .lff-settings label > div { margin-bottom: 2px; }
+          .lff-settings input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            accent-color: #000;
+            height: 2px;
+            background: #ddd;
+          }
+          .lff-settings input[type=range]::-webkit-slider-runnable-track {
+            height: 2px; background: #ddd; border-radius: 1px;
+          }
+          .lff-settings input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #000; border: none; margin-top: -5px;
+          }
+          .lff-settings input[type=range]::-moz-range-track {
+            height: 2px; background: #ddd; border-radius: 1px;
+          }
+          .lff-settings input[type=range]::-moz-range-thumb {
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #000; border: none;
+          }
+        `}</style>
+        <summary style={{ cursor: 'pointer', padding: '8px 0', userSelect: 'none', fontSize: 12, color: '#888', textAlign: 'center', listStyle: 'none' }}>Settings</summary>
         <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
         <label>
           <div>Font size: {fontSize}</div>
@@ -500,8 +526,6 @@ export function LffDemo() {
             setGravityX(nx)
             setGravity(ny)
           }}
-          labelX="Gx"
-          labelY="Gy"
         />
       </div>
 
@@ -510,7 +534,7 @@ export function LffDemo() {
 
       {fontMap && (
         <div
-          style={{ position: 'relative', display: 'inline-block', cursor: 'text', marginTop: 48 }}
+          style={{ position: 'relative', display: 'inline-block', cursor: 'text', marginTop: 120 }}
           onClick={() => inputRef.current?.focus()}
         >
           <svg width={svgW} height={svgH} style={{ background: '#fff', borderRadius: 8, display: 'block' }}>

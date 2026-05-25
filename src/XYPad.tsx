@@ -9,8 +9,6 @@ type Props = {
   yMax: number
   onChange: (x: number, y: number) => void
   size?: number
-  labelX?: string
-  labelY?: string
 }
 
 export function XYPad({
@@ -22,8 +20,6 @@ export function XYPad({
   yMax,
   onChange,
   size = 160,
-  labelX = 'X',
-  labelY = 'Y',
 }: Props) {
   const padRef = useRef<HTMLDivElement>(null)
 
@@ -96,15 +92,12 @@ export function XYPad({
             width: 12,
             height: 12,
             borderRadius: '50%',
-            background: '#4a8cff',
+            background: '#000',
             border: '2px solid #fff',
             boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
             pointerEvents: 'none',
           }}
         />
-      </div>
-      <div style={{ fontSize: 12, color: '#666' }}>
-        {labelX}: {x.toFixed(3)} / {labelY}: {y.toFixed(3)}
       </div>
     </div>
   )
