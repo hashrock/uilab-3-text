@@ -9,6 +9,7 @@ type CharInstance = {
   letter: string
   nodes: Node[]
   strokes: [number, number][]
+  rests: number[] // rest length per stroke, index-aligned with strokes
 }
 
 function isHankaku(s: string) {
@@ -16,8 +17,12 @@ function isHankaku(s: string) {
 }
 
 // Convert a glyph's raw font lines into positioned nodes + strokes (no physics).
-// Coincident endpoints are deduplicated so dragging a shared corner moves every
-// stroke that meets there.
+//
+// Shared endpoints are deduplicated so a corner is a single node, and each line
+// is subdivided into a chain of short segments. Connectivity (the topology) is
+// fixed once built — deformation only moves node positions — so a straight line
+// can bend into a smooth polyline under the brush while staying topologically
+// the same glyph.
 function buildCharInstance(
   letter: string,
   font: Font,
@@ -25,11 +30,13 @@ function buildCharInstance(
   offsetX: number,
 ): CharInstance {
   const s = fontSize / 10
+  const subLen = Math.max(6, fontSize * 0.1) // target sub-segment length in px
   const indexByKey = new Map<string, number>()
   const nodes: Node[] = []
   const strokes: [number, number][] = []
 
-  const addNode = (fx: number, fy: number): number => {
+  // Endpoints dedup across the whole glyph so corners are shared nodes.
+  const addEndpoint = (fx: number, fy: number): number => {
     const key = `${fx.toFixed(3)},${fy.toFixed(3)}`
     const existing = indexByKey.get(key)
     if (existing !== undefined) return existing
@@ -42,12 +49,33 @@ function buildCharInstance(
   }
 
   for (const ln of font.info) {
-    const a = addNode(ln.x1, ln.y1)
-    const b = addNode(ln.x2, ln.y2)
-    if (a !== b) strokes.push([a, b])
+    const a = addEndpoint(ln.x1, ln.y1)
+    const b = addEndpoint(ln.x2, ln.y2)
+    if (a === b) continue
+    const ax = nodes[a].x
+    const ay = nodes[a].y
+    const bx = nodes[b].x
+    const by = nodes[b].y
+    const len = Math.hypot(bx - ax, by - ay)
+    const segs = Math.max(1, Math.round(len / subLen))
+    let prev = a
+    for (let k = 1; k < segs; k++) {
+      const t = k / segs
+      const idx = nodes.length
+      // Interior points are unique to this line (not deduped), so each line is
+      // its own bendable chain between the shared corner nodes.
+      nodes.push({ x: ax + (bx - ax) * t, y: ay + (by - ay) * t })
+      strokes.push([prev, idx])
+      prev = idx
+    }
+    strokes.push([prev, b])
   }
 
-  return { letter, nodes, strokes }
+  const rests = strokes.map(([a, b]) =>
+    Math.hypot(nodes[b].x - nodes[a].x, nodes[b].y - nodes[a].y),
+  )
+
+  return { letter, nodes, strokes, rests }
 }
 
 export function LffStatic() {
@@ -57,6 +85,7 @@ export function LffStatic() {
   const [boxWidthPx, setBoxWidthPx] = useState(1200)
   const [boxHeightRatio, setBoxHeightRatio] = useState(1.0)
   const [brushRadius, setBrushRadius] = useState(90)
+  const [repulsion, setRepulsion] = useState(0.1)
   const [fontMap, setFontMap] = useState<Record<string, Font> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [focused, setFocused] = useState(false)
@@ -65,12 +94,23 @@ export function LffStatic() {
 
   const instancesRef = useRef<CharInstance[]>([])
   const buildKeyRef = useRef('')
-  // While dragging: the grab center (local coords) plus a snapshot of every
-  // node's position at grab time, so movement is applied relative to the start.
-  const dragRef = useRef<{ sx: number; sy: number; base: Node[][] } | null>(null)
+  // While dragging: the last pointer position (local coords). The brush nudges
+  // nodes incrementally each move so it composes with the repulsion loop instead
+  // of resetting nodes from a stale snapshot.
+  const dragRef = useRef<{ lx: number; ly: number } | null>(null)
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
   const [, setFrame] = useState(0)
   const rerender = () => setFrame((f) => (f + 1) % 1_000_000)
+  const repulsionRef = useRef(repulsion)
+  const fontSizeRef = useRef(fontSize)
+
+  useEffect(() => {
+    repulsionRef.current = repulsion
+  }, [repulsion])
+
+  useEffect(() => {
+    fontSizeRef.current = fontSize
+  }, [fontSize])
 
   useEffect(() => {
     let cancelled = false
@@ -135,6 +175,59 @@ export function LffStatic() {
     rerender()
   }, [text, fontSize, kerning, boxWidthPx, boxW, advance, fontMap])
 
+  // Relaxation loop: repel nearby vertices, then restore stroke rest lengths so
+  // the topology and segment lengths survive. Pure positional solve (no
+  // velocity), so it settles to equilibrium rather than oscillating forever.
+  useEffect(() => {
+    let raf = 0
+    const iters = 8
+    const step = () => {
+      const rep = repulsionRef.current
+      const minDist = fontSizeRef.current * 0.2
+      const minDist2 = minDist * minDist
+      for (const inst of instancesRef.current) {
+        const ns = inst.nodes
+        if (rep > 0) {
+          for (let i = 0; i < ns.length; i++) {
+            const a = ns[i]
+            for (let j = i + 1; j < ns.length; j++) {
+              const b = ns[j]
+              const dx = b.x - a.x
+              const dy = b.y - a.y
+              const d2 = dx * dx + dy * dy
+              if (d2 >= minDist2 || d2 < 0.0001) continue
+              const d = Math.sqrt(d2)
+              const push = ((minDist - d) / d) * 0.5 * rep
+              a.x -= dx * push
+              a.y -= dy * push
+              b.x += dx * push
+              b.y += dy * push
+            }
+          }
+        }
+        for (let it = 0; it < iters; it++) {
+          const { strokes, rests } = inst
+          for (let s = 0; s < strokes.length; s++) {
+            const a = ns[strokes[s][0]]
+            const b = ns[strokes[s][1]]
+            const dx = b.x - a.x
+            const dy = b.y - a.y
+            const dist = Math.hypot(dx, dy) || 0.0001
+            const diff = (rests[s] - dist) / dist
+            a.x -= dx * diff * 0.5
+            a.y -= dy * diff * 0.5
+            b.x += dx * diff * 0.5
+            b.y += dy * diff * 0.5
+          }
+        }
+      }
+      rerender()
+      raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
   let caretOff = 0
   for (const ch of text) caretOff += isHankaku(ch) ? 0.5 : 1
   const caretX = Math.min(caretOff * advance, Math.max(0, boxW - advance))
@@ -168,8 +261,7 @@ export function LffStatic() {
 
   const startDrag = (e: React.PointerEvent) => {
     const { x, y } = toLocal(e)
-    const base = instancesRef.current.map((inst) => inst.nodes.map((n) => ({ x: n.x, y: n.y })))
-    dragRef.current = { sx: x, sy: y, base }
+    dragRef.current = { lx: x, ly: y }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
 
@@ -178,20 +270,19 @@ export function LffStatic() {
     setCursor({ x, y })
     const drag = dragRef.current
     if (!drag) return
-    const dx = x - drag.sx
-    const dy = y - drag.sy
-    instancesRef.current.forEach((inst, i) => {
-      const base = drag.base[i]
-      if (!base) return
-      inst.nodes.forEach((n, k) => {
-        const b = base[k]
-        if (!b) return
-        const d = Math.hypot(b.x - drag.sx, b.y - drag.sy)
+    const dx = x - drag.lx
+    const dy = y - drag.ly
+    drag.lx = x
+    drag.ly = y
+    for (const inst of instancesRef.current) {
+      for (const n of inst.nodes) {
+        const d = Math.hypot(n.x - x, n.y - y)
         const w = falloff(d, brushRadius)
-        n.x = b.x + dx * w
-        n.y = b.y + dy * w
-      })
-    })
+        if (w === 0) continue
+        n.x += dx * w
+        n.y += dy * w
+      }
+    }
     rerender()
   }
 
@@ -291,6 +382,18 @@ export function LffStatic() {
               step={5}
               value={brushRadius}
               onChange={(e) => setBrushRadius(Number(e.target.value))}
+              style={{ width: '100%' }}
+            />
+          </label>
+          <label>
+            <div>Repulsion: {repulsion.toFixed(2)}</div>
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.05}
+              value={repulsion}
+              onChange={(e) => setRepulsion(Number(e.target.value))}
               style={{ width: '100%' }}
             />
           </label>
