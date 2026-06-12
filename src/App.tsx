@@ -2,6 +2,7 @@ import { HashRouter, Routes, Route, Link } from 'react-router-dom'
 import { Home } from './Home'
 import { LffDemo } from './LffDemo'
 import { LffStatic } from './LffStatic'
+import { LffPose } from './LffPose'
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -17,6 +18,7 @@ function Layout({ children }: { children: React.ReactNode }) {
       >
         <Link to="/">LFF</Link>
         <Link to="/static">Static</Link>
+        <Link to="/pose">Pose</Link>
         <Link to="/wavy">Wavy</Link>
       </nav>
       {children}
@@ -31,6 +33,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LffDemo />} />
           <Route path="/static" element={<LffStatic />} />
+          <Route path="/pose" element={<LffPose />} />
           <Route path="/wavy" element={<Home />} />
         </Routes>
       </Layout>
